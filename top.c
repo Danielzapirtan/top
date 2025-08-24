@@ -12,85 +12,89 @@ extern void Copy(TOP src, TOP dest);
 static int n_elements = 0;
 
 void Init(TOP top) {
-    *top = (1ULL << 63) | 1ULL;
+    *top = 1ULL; // Start with just the empty set (bit 0)
 }
 
 void Copy(TOP src, TOP dest) {
     *dest = *src;
 }
 
-int is_valid_topology(unsigned long long topology) {
-    int num_subsets = 1 << n_elements;
+int is_valid_topology_partial(unsigned long long topology, int check_up_to) {
+    // Check if empty set is included
+    if (!(topology & 1)) return 0;
     
-    // Check if empty set and full set are included
-    if (!(topology & 1)) return 0; // Empty set must be included
-    if (!(topology & (1ULL << (num_subsets - 1)))) return 0; // Full set must be included
-    
-    // Check closure under arbitrary unions
-    for (int i = 0; i < num_subsets; i++) {
+    // Check closure under finite intersections (only for sets we've checked so far)
+    for (int i = 0; i <= check_up_to; i++) {
         if (!(topology & (1ULL << i))) continue;
         
-        for (int j = i + 1; j < num_subsets; j++) {
-            if (!(topology & (1ULL << j))) continue;
-            
-            int union_set = i | j;
-            if (!(topology & (1ULL << union_set))) return 0;
-        }
-    }
-    
-    // Check closure under finite intersections
-    for (int i = 0; i < num_subsets; i++) {
-        if (!(topology & (1ULL << i))) continue;
-        
-        for (int j = i + 1; j < num_subsets; j++) {
+        for (int j = i + 1; j <= check_up_to; j++) {
             if (!(topology & (1ULL << j))) continue;
             
             int intersection = i & j;
-            if (!(topology & (1ULL << intersection))) return 0;
+            if (intersection <= check_up_to && !(topology & (1ULL << intersection))) return 0;
+        }
+    }
+    
+    // Check closure under unions (only for sets we've checked so far)
+    for (int i = 0; i <= check_up_to; i++) {
+        if (!(topology & (1ULL << i))) continue;
+        
+        for (int j = i + 1; j <= check_up_to; j++) {
+            if (!(topology & (1ULL << j))) continue;
+            
+            int union_set = i | j;
+            if (union_set <= check_up_to && !(topology & (1ULL << union_set))) return 0;
         }
     }
     
     return 1;
 }
 
+int is_valid_topology(unsigned long long topology) {
+    int num_subsets = 1 << n_elements;
+    
+    // Check if empty set and full set are included
+    if (!(topology & 1)) return 0;
+    if (!(topology & (1ULL << (num_subsets - 1)))) return 0;
+    
+    return is_valid_topology_partial(topology, num_subsets - 1);
+}
+
 void Next(TOP src, TOP dest) {
     unsigned long long current = *src;
-    
-    // Check if we've reached the end (MSB is 0)
-    if (!(current & (1ULL << 63))) {
-        *dest = 0;
-        return;
-    }
-    
-    // Remove the termination bit temporarily
-    current &= ~(1ULL << 63);
+    int num_subsets = 1 << n_elements;
     
     // Find the next valid topology
     do {
         current++;
         
-        // Check if we've exceeded the valid range for n elements
-        if (current >= (1ULL << (1ULL << n_elements))) {
-            *dest = 0; // End of enumeration
+        // Check if we've exceeded the valid range
+        if (current >= (1ULL << num_subsets)) {
+            *dest = 0;
             return;
+        }
+        
+        // Early pruning: check if current candidate is valid for the sets processed so far
+        // This helps eliminate many invalid topologies early
+        int valid_so_far = 1;
+        for (int i = 0; i < num_subsets; i++) {
+            if (!is_valid_topology_partial(current, i)) {
+                valid_so_far = 0;
+                break;
+            }
         }
         
     } while (!is_valid_topology(current));
     
-    // Add the termination bit back
-    *dest = current | (1ULL << 63);
+    *dest = current;
 }
 
 void Render(TOP top) {
     unsigned long long topology = *top;
     
-    // Check for end of enumeration
-    if (!(topology & (1ULL << 63))) {
+    if (topology == 0) {
         return;
     }
-    
-    // Remove the termination bit
-    topology &= ~(1ULL << 63);
     
     int num_subsets = 1 << n_elements;
     int first = 1;
@@ -138,10 +142,8 @@ int main(int argc, char *argv[]) {
     TOP current = &current_topology;
     TOP next = &next_topology;
     
-    // Initialize to the first topology
     Init(current);
     
-    // Generate and display all topologies
     while (*current != 0) {
         Render(current);
         Next(current, next);
