@@ -19,34 +19,6 @@ void Copy(TOP src, TOP dest) {
     *dest = *src;
 }
 
-void Next(TOP src, TOP dest) {
-    unsigned long long current = *src;
-    
-    // Check if we've reached the end (MSB is 0)
-    if (!(current & (1ULL << 63))) {
-        *dest = 0;
-        return;
-    }
-    
-    // Remove the termination bit temporarily
-    current &= ~(1ULL << 63);
-    
-    // Find the next valid topology
-    do {
-        current++;
-        
-        // Check if we've exceeded the valid range for n elements
-        if (current >= (1ULL << (1ULL << n_elements))) {
-            *dest = 0; // End of enumeration
-            return;
-        }
-        
-    } while (!is_valid_topology(current));
-    
-    // Add the termination bit back
-    *dest = current | (1ULL << 63);
-}
-
 int is_valid_topology(unsigned long long topology) {
     int num_subsets = 1 << n_elements;
     
@@ -79,6 +51,34 @@ int is_valid_topology(unsigned long long topology) {
     }
     
     return 1;
+}
+
+void Next(TOP src, TOP dest) {
+    unsigned long long current = *src;
+    
+    // Check if we've reached the end (MSB is 0)
+    if (!(current & (1ULL << 63))) {
+        *dest = 0;
+        return;
+    }
+    
+    // Remove the termination bit temporarily
+    current &= ~(1ULL << 63);
+    
+    // Find the next valid topology
+    do {
+        current++;
+        
+        // Check if we've exceeded the valid range for n elements
+        if (current >= (1ULL << (1ULL << n_elements))) {
+            *dest = 0; // End of enumeration
+            return;
+        }
+        
+    } while (!is_valid_topology(current));
+    
+    // Add the termination bit back
+    *dest = current | (1ULL << 63);
 }
 
 void Render(TOP top) {
