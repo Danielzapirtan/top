@@ -126,14 +126,14 @@ void Render(TOP top) {
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <n>\n", argv[0]);
-        fprintf(stderr, "Where n is the number of elements (3-6)\n");
+        fprintf(stderr, "Where n is the number of elements (3-5)\n");
         return 1;
     }
     
     n_elements = atoi(argv[1]);
     
-    if (n_elements < 3 || n_elements > 6) {
-        fprintf(stderr, "Error: n must be between 3 and 6 inclusive\n");
+    if (n_elements < 3 || n_elements > 5) {
+        fprintf(stderr, "Error: n must be between 3 and 5 inclusive\n");
         return 1;
     }
     
@@ -143,6 +143,8 @@ int main(int argc, char *argv[]) {
     TOP next = &next_topology;
     
     Init(current);
+    Next(current, next);
+    Copy(next, current);
     
     while (*current != 0) {
         Render(current);
