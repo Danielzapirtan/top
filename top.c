@@ -3,197 +3,167 @@
 #include <string.h>
 #include <stdbool.h>
 
-// Function to convert subset index to binary representation
-void subset_to_binary(int subset, int n, char* binary) {
-    for (int i = 0; i < n; i++) {
-        binary[i] = (subset & (1 << i)) ? '1' : '0';
-    }
-    binary[n] = '\0';
-}
+typedef struct {
+    int n;
+    int power;
+    char* topology;
+    int count;
+} TopologyGenerator;
 
-// Function to print subset in readable format
-void print_subset(int subset, int n) {
-    printf("{");
-    bool first = true;
-    if (subset == 0) {
-        printf("∅");
-    } else {
-        for (int i = 0; i < n; i++) {
-            if (subset & (1 << i)) {
-                if (!first) printf(",");
-                printf("%c", 'a' + i);
-                first = false;
-            }
-        }
-    }
-    printf("}");
-}
-
-// Check if a topology string is valid
-bool is_valid_topology(char* topology, int n) {
-    int total_subsets = 1 << n;
-    
-    // Rule 1: Empty set (subset 0) and full set (subset 2^n - 1) must be in topology
-    if (topology[0] != '1' || topology[total_subsets - 1] != '1') {
-        return false;
-    }
-    
-    // Rule 2: Arbitrary unions must be in topology
-    for (int i = 0; i < total_subsets; i++) {
-        if (topology[i] == '1') {
-            for (int j = i + 1; j < total_subsets; j++) {
-                if (topology[j] == '1') {
-                    int union_set = i | j;
-                    if (topology[union_set] == '0') {
-                        return false;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Rule 3: Finite intersections must be in topology
-    for (int i = 0; i < total_subsets; i++) {
-        if (topology[i] == '1') {
-            for (int j = i + 1; j < total_subsets; j++) {
-                if (topology[j] == '1') {
-                    int intersection = i & j;
-                    if (topology[intersection] == '0') {
-                        return false;
-                    }
-                }
-            }
-        }
-    }
-    
-    return true;
-}
-
-// Recursive function to generate all possible topologies
-void generate_topologies(char* topology, int pos, int n, int* count) {
-    int total_subsets = 1 << n;
-    
-    if (pos == total_subsets) {
-        if (is_valid_topology(topology, n)) {
-            (*count)++;
-            printf("Topology %d: %s\n", *count, topology);
-            printf("Contains subsets: ");
-            bool first = true;
-            for (int i = 0; i < total_subsets; i++) {
-                if (topology[i] == '1') {
-                    if (!first) printf(", ");
-                    print_subset(i, n);
-                    first = false;
-                }
-            }
-            printf("\n\n");
-        }
-        return;
-    }
-    
-    // Skip if this position is already determined by topology rules
-    if (topology[pos] != '2') {
-        generate_topologies(topology, pos + 1, n, count);
-        return;
-    }
-    
-    // Try setting this subset to 0 (not in topology)
-    topology[pos] = '0';
-    
-    // Check if this violates any immediate rules
-    bool valid_0 = true;
-    
-    // If this is empty set or full set, it must be in topology
-    if (pos == 0 || pos == (1 << n) - 1) {
-        valid_0 = false;
-    }
-    
-    if (valid_0) {
-        generate_topologies(topology, pos + 1, n, count);
-    }
-    
-    // Try setting this subset to 1 (in topology)
-    topology[pos] = '1';
-    
-    // When adding a set to topology, we must also add all necessary unions and intersections
-    bool valid_1 = true;
-    char temp_topology[total_subsets + 1];
-    strcpy(temp_topology, topology);
-    
-    // Add necessary unions
-    for (int i = 0; i < pos; i++) {
-        if (temp_topology[i] == '1') {
-            int union_set = i | pos;
-            if (union_set < total_subsets && temp_topology[union_set] == '0') {
-                valid_1 = false;
-                break;
-            } else if (union_set < total_subsets && temp_topology[union_set] == '2') {
-                temp_topology[union_set] = '1';
-            }
-        }
-    }
-    
-    // Add necessary intersections
-    if (valid_1) {
-        for (int i = 0; i < pos; i++) {
-            if (temp_topology[i] == '1') {
-                int intersection = i & pos;
-                if (temp_topology[intersection] == '0') {
-                    valid_1 = false;
-                    break;
-                } else if (temp_topology[intersection] == '2') {
-                    temp_topology[intersection] = '1';
-                }
-            }
-        }
-    }
-    
-    if (valid_1) {
-        strcpy(topology, temp_topology);
-        generate_topologies(topology, pos + 1, n, count);
-    }
-    
-    // Reset for backtracking
-    topology[pos] = '2';
-}
+bool is_topology_valid(TopologyGenerator* gen, int pos);
+bool is_union_closed(TopologyGenerator* gen);
+bool is_intersection_closed(TopologyGenerator* gen);
+bool contains_universe(TopologyGenerator* gen);
+bool contains_empty_set(TopologyGenerator* gen);
+void print_topology_with_letters(TopologyGenerator* gen);
+void generate_topologies(TopologyGenerator* gen, int pos);
+void print_progress(TopologyGenerator* gen, int pos);
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         printf("Usage: %s <n>\n", argv[0]);
-        printf("Where n is the number of elements (3-7)\n");
+        printf("Where n is between 3 and 7\n");
         return 1;
     }
-    
+
     int n = atoi(argv[1]);
     if (n < 3 || n > 7) {
         printf("Error: n must be between 3 and 7\n");
         return 1;
     }
-    
-    int total_subsets = 1 << n;
-    printf("Generating all topologies on set {");
+
+    TopologyGenerator gen;
+    gen.n = n;
+    gen.power = 1 << n;  // 2^n
+    gen.topology = (char*)malloc((gen.power + 1) * sizeof(char));
+    gen.count = 0;
+
+    // Initialize topology with '2' (unset)
+    for (int i = 0; i < gen.power; i++) {
+        gen.topology[i] = '2';
+    }
+    gen.topology[gen.power] = '\0';
+
+    printf("Generating topologies for set of %d elements: {", n);
     for (int i = 0; i < n; i++) {
-        if (i > 0) printf(",");
         printf("%c", 'a' + i);
+        if (i < n - 1) printf(", ");
     }
-    printf("} with %d subsets\n\n", total_subsets);
-    
-    // Initialize topology string: all positions unset (2)
-    char* topology = malloc(total_subsets + 1);
-    for (int i = 0; i < total_subsets; i++) {
-        topology[i] = '2';
-    }
-    topology[total_subsets] = '\0';
-    
-    // Empty set and full set must be in topology
-    topology[0] = '1';  // Empty set
-    topology[total_subsets - 1] = '1';  // Full set
-    
-    int count = 0;
-    generate_topologies(topology, 0, n, &count);
-    
-    printf("Total number of topologies found: %d\n", count);
-    
-    free(topology);
+    printf("}\n\n");
+
+    generate_topologies(&gen, 0);
+
+    printf("\nTotal topologies found: %d\n", gen.count);
+    free(gen.topology);
     return 0;
+}
+
+bool is_topology_valid(TopologyGenerator* gen, int pos) {
+    // Check if we've filled all positions
+    if (pos == gen->power) {
+        return contains_empty_set(gen) && 
+               contains_universe(gen) &&
+               is_union_closed(gen) &&
+               is_intersection_closed(gen);
+    }
+    return true;
+}
+
+bool contains_universe(TopologyGenerator* gen) {
+    // Universe set is the last one (all 1's in binary)
+    return gen->topology[gen->power - 1] == '1';
+}
+
+bool contains_empty_set(TopologyGenerator* gen) {
+    // Empty set is the first one (all 0's in binary)
+    return gen->topology[0] == '1';
+}
+
+bool is_union_closed(TopologyGenerator* gen) {
+    // For all pairs of sets in topology, their union must also be in topology
+    for (int i = 0; i < gen->power; i++) {
+        if (gen->topology[i] != '1') continue;
+        for (int j = 0; j < gen->power; j++) {
+            if (gen->topology[j] != '1') continue;
+            
+            int union_set = i | j;
+            if (gen->topology[union_set] != '1') {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool is_intersection_closed(TopologyGenerator* gen) {
+    // For all pairs of sets in topology, their intersection must also be in topology
+    for (int i = 0; i < gen->power; i++) {
+        if (gen->topology[i] != '1') continue;
+        for (int j = 0; j < gen->power; j++) {
+            if (gen->topology[j] != '1') continue;
+            
+            int intersection_set = i & j;
+            if (gen->topology[intersection_set] != '1') {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void print_topology_with_letters(TopologyGenerator* gen) {
+    printf("Topology %d: %s\n", ++gen->count, gen->topology);
+    
+    printf("Sets in topology:\n");
+    for (int i = 0; i < gen->power; i++) {
+        if (gen->topology[i] == '1') {
+            printf("{");
+            bool first = true;
+            for (int j = 0; j < gen->n; j++) {
+                if (i & (1 << j)) {
+                    if (!first) printf(", ");
+                    printf("%c", 'a' + j);
+                    first = false;
+                }
+            }
+            if (first) printf("∅"); // Empty set
+            printf("} ");
+        }
+    }
+    printf("\n");
+}
+
+void generate_topologies(TopologyGenerator* gen, int pos) {
+    if (pos == gen->power) {
+        if (is_topology_valid(gen, pos)) {
+            print_topology_with_letters(gen);
+        }
+        return;
+    }
+
+    // Try setting current position to 0 (not in topology)
+    gen->topology[pos] = '0';
+    if (is_topology_valid(gen, pos + 1)) {
+        generate_topologies(gen, pos + 1);
+    }
+
+    // Try setting current position to 1 (in topology)
+    gen->topology[pos] = '1';
+    if (is_topology_valid(gen, pos + 1)) {
+        generate_topologies(gen, pos + 1);
+    }
+
+    // Backtrack
+    gen->topology[pos] = '2';
+}
+
+void print_progress(TopologyGenerator* gen, int pos) {
+    static int last_percent = -1;
+    int percent = (pos * 100) / gen->power;
+    
+    if (percent != last_percent) {
+        printf("\rProgress: %d%%", percent);
+        fflush(stdout);
+        last_percent = percent;
+    }
 }
