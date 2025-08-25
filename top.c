@@ -5,11 +5,12 @@
 typedef unsigned long long *TOP;
 
 extern void Init(TOP top);
-extern void Next(TOP src, TOP dest);
+extern void Next(TOP src, TOP dest, int *up_to);
 extern void Render(TOP top);
 extern void Copy(TOP src, TOP dest);
 
 static int n_elements = 0;
+static int up_to = 1;
 
 void Init(TOP top) {
     *top = 1ULL; // Start with just the empty set (bit 0)
@@ -60,13 +61,24 @@ int is_valid_topology(unsigned long long topology) {
     return is_valid_topology_partial(topology, num_subsets - 1);
 }
 
-void Next(TOP src, TOP dest) {
+void Next(TOP src, TOP dest, int *up_to) {
     unsigned long long current = *src;
     int num_subsets = 1 << n_elements;
     
     // Find the next valid topology
     do {
-        current++;
+	current++;
+        int valid_so_far = 1;
+	int i;
+        for (i = 0; i < num_subsets; i++) {
+            if (!is_valid_topology_partial(current, i)) {
+                valid_so_far = 0;
+                break;
+            }
+        }
+	*up_to = i;
+	unsigned long long step = 1ULL << *up_to;
+        current = step * (current / step + 1ULL);
         
         // Check if we've exceeded the valid range
         if (current >= (1ULL << num_subsets)) {
@@ -74,15 +86,6 @@ void Next(TOP src, TOP dest) {
             return;
         }
         
-        // Early pruning: check if current candidate is valid for the sets processed so far
-        // This helps eliminate many invalid topologies early
-        int valid_so_far = 1;
-        for (int i = 0; i < num_subsets; i++) {
-            if (!is_valid_topology_partial(current, i)) {
-                valid_so_far = 0;
-                break;
-            }
-        }
         
     } while (!is_valid_topology(current));
     
@@ -143,12 +146,12 @@ int main(int argc, char *argv[]) {
     TOP next = &next_topology;
     
     Init(current);
-    Next(current, next);
+    Next(current, next, &up_to);
     Copy(next, current);
     
     while (*current != 0) {
         Render(current);
-        Next(current, next);
+        Next(current, next, &up_to);
         Copy(next, current);
     }
     
