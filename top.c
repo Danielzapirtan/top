@@ -66,16 +66,13 @@ void Next(TOP src, TOP dest, int *up_to) {
 	unsigned long long current = *src;
     
 	current++;
-	int valid_so_far = 1;
 	int i;
-	for (i = 0; i <= *up_to; i++) {
+	for (i = 0; i <= num_subsets - 2; i++) {
 	    if (!is_valid_topology_partial(current, i)) {
-		valid_so_far = 0;
 		break;
 	    }
 	}
-	*up_to = i;
-	unsigned long long step = 1ULL << *up_to;
+	unsigned long long step = 1ULL << i;
 	current = step * (current / step + 1ULL);
 
 	// Check if we've exceeded the valid range
