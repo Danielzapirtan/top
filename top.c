@@ -10,6 +10,7 @@ extern void Render(TOP top);
 extern void Copy(TOP src, TOP dest);
 
 static int n_elements = 0;
+int num_subsets;
 static int up_to = 1;
 
 void Init(TOP top) {
@@ -37,6 +38,7 @@ int is_valid_topology_partial(unsigned long long topology, int check_up_to) {
     }
     
     // Check closure under unions (only for sets we've checked so far)
+    if (check_up_to + 1 == num_subsets)
     for (int i = 0; i <= check_up_to; i++) {
         if (!(topology & (1ULL << i))) continue;
         
@@ -52,7 +54,6 @@ int is_valid_topology_partial(unsigned long long topology, int check_up_to) {
 }
 
 int is_valid_topology(unsigned long long topology) {
-    int num_subsets = 1 << n_elements;
     
     // Check if empty set and full set are included
     if (!(topology & 1)) return 0;
@@ -134,6 +135,7 @@ int main(int argc, char *argv[]) {
     }
     
     n_elements = atoi(argv[1]);
+    num_subsets = 1 << n_elements;
     
     if (n_elements < 3 || n_elements > 5) {
         fprintf(stderr, "Error: n must be between 3 and 5 inclusive\n");
