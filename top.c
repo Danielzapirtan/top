@@ -1,154 +1,199 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
-typedef unsigned long long *TOP;
-
-extern void Init(TOP top);
-extern void Next(TOP src, TOP dest, int *up_to);
-extern void Render(TOP top);
-extern void Copy(TOP src, TOP dest);
-
-static int n_elements = 0;
-int num_subsets;
-static int up_to = 1;
-
-void Init(TOP top) {
-    *top = 1ULL; // Start with just the empty set (bit 0)
+// Function to convert subset index to binary representation
+void subset_to_binary(int subset, int n, char* binary) {
+    for (int i = 0; i < n; i++) {
+        binary[i] = (subset & (1 << i)) ? '1' : '0';
+    }
+    binary[n] = '\0';
 }
 
-void Copy(TOP src, TOP dest) {
-    *dest = *src;
+// Function to print subset in readable format
+void print_subset(int subset, int n) {
+    printf("{");
+    bool first = true;
+    if (subset == 0) {
+        printf("∅");
+    } else {
+        for (int i = 0; i < n; i++) {
+            if (subset & (1 << i)) {
+                if (!first) printf(",");
+                printf("%c", 'a' + i);
+                first = false;
+            }
+        }
+    }
+    printf("}");
 }
 
-int is_valid_topology_partial(unsigned long long topology, int check_up_to) {
-    // Check if empty set is included
-    if (!(topology & 1)) return 0;
+// Check if a topology string is valid
+bool is_valid_topology(char* topology, int n) {
+    int total_subsets = 1 << n;
     
-    // Check closure under finite intersections (only for sets we've checked so far)
-    for (int i = 0; i <= check_up_to; i++) {
-        if (!(topology & (1ULL << i))) continue;
-        
-        for (int j = i + 1; j <= check_up_to; j++) {
-            if (!(topology & (1ULL << j))) continue;
-            
-            int intersection = i & j;
-            if (intersection <= check_up_to && !(topology & (1ULL << intersection))) return 0;
+    // Rule 1: Empty set (subset 0) and full set (subset 2^n - 1) must be in topology
+    if (topology[0] != '1' || topology[total_subsets - 1] != '1') {
+        return false;
+    }
+    
+    // Rule 2: Arbitrary unions must be in topology
+    for (int i = 0; i < total_subsets; i++) {
+        if (topology[i] == '1') {
+            for (int j = i + 1; j < total_subsets; j++) {
+                if (topology[j] == '1') {
+                    int union_set = i | j;
+                    if (topology[union_set] == '0') {
+                        return false;
+                    }
+                }
+            }
         }
     }
     
-    // Check closure under unions (only for sets we've checked so far)
-    if (check_up_to + 1 == num_subsets)
-    for (int i = 0; i <= check_up_to; i++) {
-        if (!(topology & (1ULL << i))) continue;
-        
-        for (int j = i + 1; j <= check_up_to; j++) {
-            if (!(topology & (1ULL << j))) continue;
-            
-            int union_set = i | j;
-            if (union_set <= check_up_to && !(topology & (1ULL << union_set))) return 0;
+    // Rule 3: Finite intersections must be in topology
+    for (int i = 0; i < total_subsets; i++) {
+        if (topology[i] == '1') {
+            for (int j = i + 1; j < total_subsets; j++) {
+                if (topology[j] == '1') {
+                    int intersection = i & j;
+                    if (topology[intersection] == '0') {
+                        return false;
+                    }
+                }
+            }
         }
     }
     
-    return 1;
+    return true;
 }
 
-int is_valid_topology(unsigned long long topology) {
+// Recursive function to generate all possible topologies
+void generate_topologies(char* topology, int pos, int n, int* count) {
+    int total_subsets = 1 << n;
     
-    // Check if empty set and full set are included
-    if (!(topology & 1)) return 0;
-    if (!(topology & (1ULL << (num_subsets - 1)))) return 0;
-    
-    return is_valid_topology_partial(topology, num_subsets - 1);
-}
-
-void Next(TOP src, TOP dest, int *up_to) {
-	unsigned long long current = *src;
-    
-	current++;
-	int i;
-	for (i = 0; i <= num_subsets - 2; i++) {
-	    if (!is_valid_topology_partial(current, i)) {
-		break;
-	    }
-	}
-	unsigned long long step = 1ULL << i;
-	current = step * (current / step + 1ULL);
-
-	// Check if we've exceeded the valid range
-	if (current >= (1ULL << num_subsets)) {
-	    *dest = 0;
-	    return;
-	}
-        
-        
-	*dest = current;
-}
-
-void Render(TOP top) {
-    unsigned long long topology = *top;
-    
-    if (topology == 0) {
+    if (pos == total_subsets) {
+        if (is_valid_topology(topology, n)) {
+            (*count)++;
+            printf("Topology %d: %s\n", *count, topology);
+            printf("Contains subsets: ");
+            bool first = true;
+            for (int i = 0; i < total_subsets; i++) {
+                if (topology[i] == '1') {
+                    if (!first) printf(", ");
+                    print_subset(i, n);
+                    first = false;
+                }
+            }
+            printf("\n\n");
+        }
         return;
     }
     
-    int num_subsets = 1 << n_elements;
-    int first = 1;
+    // Skip if this position is already determined by topology rules
+    if (topology[pos] != '2') {
+        generate_topologies(topology, pos + 1, n, count);
+        return;
+    }
     
-    printf("{");
+    // Try setting this subset to 0 (not in topology)
+    topology[pos] = '0';
     
-    for (int i = 0; i < num_subsets; i++) {
-        if (topology & (1ULL << i)) {
-            if (!first) printf(", ");
-            first = 0;
-            
-            printf("{");
-            int subset_first = 1;
-            
-            for (int j = 0; j < n_elements; j++) {
-                if (i & (1 << j)) {
-                    if (!subset_first) printf(",");
-                    subset_first = 0;
-                    printf("%c", 'a' + j);
-                }
+    // Check if this violates any immediate rules
+    bool valid_0 = true;
+    
+    // If this is empty set or full set, it must be in topology
+    if (pos == 0 || pos == (1 << n) - 1) {
+        valid_0 = false;
+    }
+    
+    if (valid_0) {
+        generate_topologies(topology, pos + 1, n, count);
+    }
+    
+    // Try setting this subset to 1 (in topology)
+    topology[pos] = '1';
+    
+    // When adding a set to topology, we must also add all necessary unions and intersections
+    bool valid_1 = true;
+    char temp_topology[total_subsets + 1];
+    strcpy(temp_topology, topology);
+    
+    // Add necessary unions
+    for (int i = 0; i < pos; i++) {
+        if (temp_topology[i] == '1') {
+            int union_set = i | pos;
+            if (union_set < total_subsets && temp_topology[union_set] == '0') {
+                valid_1 = false;
+                break;
+            } else if (union_set < total_subsets && temp_topology[union_set] == '2') {
+                temp_topology[union_set] = '1';
             }
-            printf("}");
         }
     }
     
-    printf("}\n");
+    // Add necessary intersections
+    if (valid_1) {
+        for (int i = 0; i < pos; i++) {
+            if (temp_topology[i] == '1') {
+                int intersection = i & pos;
+                if (temp_topology[intersection] == '0') {
+                    valid_1 = false;
+                    break;
+                } else if (temp_topology[intersection] == '2') {
+                    temp_topology[intersection] = '1';
+                }
+            }
+        }
+    }
+    
+    if (valid_1) {
+        strcpy(topology, temp_topology);
+        generate_topologies(topology, pos + 1, n, count);
+    }
+    
+    // Reset for backtracking
+    topology[pos] = '2';
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s <n>\n", argv[0]);
-        fprintf(stderr, "Where n is the number of elements (3-5)\n");
+        printf("Usage: %s <n>\n", argv[0]);
+        printf("Where n is the number of elements (3-7)\n");
         return 1;
     }
     
-    n_elements = atoi(argv[1]);
-    num_subsets = 1 << n_elements;
-    
-    if (n_elements < 3 || n_elements > 5) {
-        fprintf(stderr, "Error: n must be between 3 and 5 inclusive\n");
+    int n = atoi(argv[1]);
+    if (n < 3 || n > 7) {
+        printf("Error: n must be between 3 and 7\n");
         return 1;
     }
     
-    unsigned long long current_topology;
-    unsigned long long next_topology;
-    TOP current = &current_topology;
-    TOP next = &next_topology;
-    
-    Init(current);
-    Next(current, next, &up_to);
-    Copy(next, current);
-    
-    while (*current != 0) {
-	if (is_valid_topology(*current))
-		Render(current);
-        Next(current, next, &up_to);
-        Copy(next, current);
+    int total_subsets = 1 << n;
+    printf("Generating all topologies on set {");
+    for (int i = 0; i < n; i++) {
+        if (i > 0) printf(",");
+        printf("%c", 'a' + i);
     }
+    printf("} with %d subsets\n\n", total_subsets);
     
+    // Initialize topology string: all positions unset (2)
+    char* topology = malloc(total_subsets + 1);
+    for (int i = 0; i < total_subsets; i++) {
+        topology[i] = '2';
+    }
+    topology[total_subsets] = '\0';
+    
+    // Empty set and full set must be in topology
+    topology[0] = '1';  // Empty set
+    topology[total_subsets - 1] = '1';  // Full set
+    
+    int count = 0;
+    generate_topologies(topology, 0, n, &count);
+    
+    printf("Total number of topologies found: %d\n", count);
+    
+    free(topology);
     return 0;
 }
